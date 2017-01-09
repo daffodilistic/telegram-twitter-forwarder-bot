@@ -108,8 +108,11 @@ class FetchAndSendTweetsJob(Job):
                     'photo_url': photo_url,
                 })
 
+        if not tweet_rows:
+            return
+
         with db.transaction():
-            Tweet.insert_many(tweet_rows)
+            Tweet.insert_many(tweet_rows).execute()
             TwitterUser.update(last_fetched=datetime.now()) \
                 .where(TwitterUser.id << [tw.id for tw in updated_tw_users]).execute()
 
