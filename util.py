@@ -32,12 +32,29 @@ def markdown_twitter_usernames(text):
                   .format(username=s.group(1).replace(r'\_', '_')),
                   text)
 
+
+def markdown_twitter_hashtags(text):
+    """Restore markdown escaped hashtags and make them link to twitter"""
+    return re.sub(r'#([^\s]*)',
+                  lambda s: '[#{tag}](https://twitter.com/hashtag/{tag})'
+                  .format(tag=s.group(1).replace(r'\_', '_')),
+                  text)
+
+
+def prepare_tweet_text(text):
+    """Do all escape things for tweet text"""
+    res = escape_markdown(text)
+    res = markdown_twitter_usernames(res)
+    res = markdown_twitter_hashtags(res)
+    return res
+
+
 def sudo(bot, uid):
-        for tg_user_id in bot.sudoers:
-            bot.logger.debug("comparing " + str(uid) + " with " + str(tg_user_id))
-            if tg_user_id == uid:
-                bot.logger.debug("User " + str(uid) + " is a sudoer!")
-                return True
-                
-        bot.logger.debug("User " + str(uid) + " is NOT a sudoer!")
-        return False
+    for tg_user_id in bot.sudoers:
+        bot.logger.debug("comparing " + str(uid) + " with " + str(tg_user_id))
+        if tg_user_id == uid:
+            bot.logger.debug("User " + str(uid) + " is a sudoer!")
+            return True
+            
+    bot.logger.debug("User " + str(uid) + " is NOT a sudoer!")
+    return False
