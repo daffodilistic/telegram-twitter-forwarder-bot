@@ -2,7 +2,8 @@ import urllib.error
 import logging
 import telegram
 import time
-
+import json
+import pprint 
 
 try:
     from queue import Queue, PriorityQueue
@@ -54,6 +55,7 @@ class Job(object):
 
 class BaseBot(object):
     POLL_TIMEOUT = 10
+    sudoers = []
 
     def __init__(self, token, update_offset=0):
 
@@ -65,6 +67,11 @@ class BaseBot(object):
         self.update_offset = update_offset
         self.update_queue = Queue()
         self.job_queue = JobQueue()
+
+        with open('sudoers.json') as json_data:
+            self.sudoers = json.load(json_data)
+        
+        self.logger.debug("List of sudoers: " + pprint.pformat(self.sudoers))
 
     def poll(self):
         got_something = False
@@ -122,15 +129,17 @@ class BaseBot(object):
             self.ack(upd)
 
     def handle_cmd(self, msg, cmd, args):
-
-        try:
-            handler = getattr(self, 'cmd_' + cmd)
-        except AttributeError:
-            self.logger.debug('Command /' + cmd + ' not implemented.')
-            return
-
-        handler(msg, args)
-
+        if self.sudo(msg.from_user.id):
+            try:
+                handler = getattr(self, 'cmd_' + cmd)
+            except AttributeError:
+                self.logger.debug('Command /' + cmd + ' not implemented.')
+                return
+                
+            handler(msg, args)
+        else:
+            self.reply(msg, str(msg.from_user.name) + ' is not in the sudoers file. This incident will be reported.')
+            
     def cmd_ping(self, msg, args):
         self.reply(msg, 'Pong!')
 
@@ -161,3 +170,13 @@ class BaseBot(object):
             self.loop()
         except KeyboardInterrupt:
             self.stop()
+
+    def sudo(self, uid):
+        for tg_user_id in self.sudoers:
+            self.logger.debug("comparing " + str(uid) + " with " + str(tg_user_id))
+            if tg_user_id == uid:
+                self.logger.debug("User " + str(uid) + " is a sudoer!")
+                return True
+                
+        self.logger.debug("User " + str(uid) + " is NOT a sudoer!")
+        return False
