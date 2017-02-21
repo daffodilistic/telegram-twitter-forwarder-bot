@@ -64,22 +64,23 @@ class FetchAndSendTweetsJob(Job):
                 tw_user.last_fetched = datetime.now()
                 tw_user.save()
             except tweepy.error.TweepError as e:
-                sc = e.response.status_code
-                if sc == 429:
-                    self.logger.debug("- Hit ratelimit, breaking.")
-                    break
+                if e.response is not None:
+                    sc = e.response.status_code
+                    if sc == 429:
+                        self.logger.debug("- Hit ratelimit, breaking.")
+                        break
                     
-                if sc == 401:
-                    self.logger.debug("- Protected tweets here.")
+                    if sc == 401:
+                        self.logger.debug("- Protected tweets here.")
+                        continue
+                        
+                    if sc == 404:
+                        self.logger.debug("- 404? Maybe screen name changed?")
+                        continue
+                        
+                    self.logger.debug(
+                        "- Unknown exception, Status code {}".format(sc))
                     continue
-                    
-                if sc == 404:
-                    self.logger.debug("- 404? Maybe screen name changed?")
-                    continue
-                    
-                self.logger.debug(
-                    "- Unknown exception, Status code {}".format(sc))
-                continue
 
             for tweet in tweets:
                 self.logger.debug("- Got tweet: {}".format(tweet.text))
