@@ -15,7 +15,7 @@ def with_touched_chat(f):
             kwargs.update(chat=chat)
             return f(bot, update, *args, **kwargs)
         else:
-            bot.reply(chat, str(update.message.from_user.name) + ' is not in the sudoers file. This incident will be reported.')
+            bot.reply(update, str(update.message.from_user.name) + ' is not in the sudoers file. This incident will be reported.')
     return wrapper
 
 
