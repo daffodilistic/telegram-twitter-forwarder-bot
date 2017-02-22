@@ -11,11 +11,11 @@ def with_touched_chat(f):
         chat = bot.get_chat(update.message.chat)
         chat.touch_contact()
 
-        if self.sudo(msg.from_user.id):
+        if sudo(bot, update.message.from_user.id):
             kwargs.update(chat=chat)
             return f(bot, update, *args, **kwargs)
         else:
-            bot.reply(msg, str(update.from_user.name) + ' is not in the sudoers file. This incident will be reported.')
+            bot.reply(chat, str(update.message.from_user.name) + ' is not in the sudoers file. This incident will be reported.')
     return wrapper
 
 

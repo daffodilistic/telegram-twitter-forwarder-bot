@@ -83,6 +83,9 @@ class Tweet(Model):
     def name(self):
         return self.twitter_user.name
 
+for t in (TwitterUser, TelegramChat, Tweet, Subscription):
+    t.create_table(fail_silently=True)
+
 # Migrate new fields. TODO: think of some better migration mechanism
 db = SqliteDatabase('peewee.db', timeout=10)
 migrator = SqliteMigrator(db)
