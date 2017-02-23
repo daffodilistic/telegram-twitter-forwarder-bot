@@ -1,6 +1,8 @@
 from functools import wraps
+from envparse import Env
 import re
 
+env = Env(ENABLE_SUDO=bool)
 
 def with_touched_chat(f):
     @wraps(f)
@@ -50,11 +52,14 @@ def prepare_tweet_text(text):
 
 
 def sudo(bot, uid):
-    for tg_user_id in bot.sudoers:
-        bot.logger.debug("comparing " + str(uid) + " with " + str(tg_user_id))
-        if tg_user_id == uid:
-            bot.logger.debug("User " + str(uid) + " is a sudoer!")
-            return True
-            
-    bot.logger.debug("User " + str(uid) + " is NOT a sudoer!")
-    return False
+    if env('ENABLE_SUDO') is False:
+        return True
+    else:
+        for tg_user_id in bot.sudoers:
+            bot.logger.debug("comparing " + str(uid) + " with " + str(tg_user_id))
+            if tg_user_id == uid:
+                bot.logger.debug("User " + str(uid) + " is a sudoer!")
+                return True
+                
+        bot.logger.debug("User " + str(uid) + " is NOT a sudoer!")
+        return False
