@@ -38,7 +38,7 @@ def markdown_twitter_usernames(text):
 def markdown_twitter_hashtags(text):
     """Restore markdown escaped hashtags and make them link to twitter"""
     return re.sub(r' #([^\s]*)',
-                  lambda s: '[#{tag}](https://twitter.com/hashtag/{tag})'
+                  lambda s: ' [#{tag}](https://twitter.com/hashtag/{tag})'
                   .format(tag=s.group(1).replace(r'\_', '_')),
                   text)
 
