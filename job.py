@@ -6,10 +6,15 @@ from datetime import datetime
 from threading import Event
 
 import tweepy
+from telegram.error import TelegramError
 from telegram.ext import Job
 
-from models import TwitterUser, Tweet, Subscription, db
+from models import TwitterUser, Tweet, Subscription, db, TelegramChat
 
+INFO_CLEANUP = {
+    'NOTFOUND': "Your subscription to @{} was removed because that profile doesn't exist anymore. Maybe the account's name changed?",
+    'PROTECTED': "Your subscription to @{} was removed because that profile is protected and can't be fetched.",
+}
 
 class FetchAndSendTweetsJob(Job):
     # Twitter API rate limit parameters
@@ -47,6 +52,8 @@ class FetchAndSendTweetsJob(Job):
                          .group_by(TwitterUser)
                          .order_by(TwitterUser.last_fetched)))
         updated_tw_users = []
+        users_to_cleanup = []
+
         for tw_user in tw_users:
             try:
                 if tw_user.last_tweet_id == 0:
@@ -69,13 +76,15 @@ class FetchAndSendTweetsJob(Job):
                 if sc == 429:
                     self.logger.debug("- Hit ratelimit, breaking.")
                     break
-                updated_tw_users.append(tw_user)
+
                 if sc == 401:
-                    self.logger.debug("- Protected tweets here.")
+                    users_to_cleanup.append((tw_user, 'PROTECTED'))
+                    self.logger.debug("- Protected tweets here. Cleaning up this user")
                     continue
 
                 if sc == 404:
-                    self.logger.debug("- 404? Maybe screen name changed?")
+                    users_to_cleanup.append((tw_user, 'NOTFOUND'))
+                    self.logger.debug("- 404? Maybe screen name changed? Cleaning up this user")
                     continue
 
                 self.logger.debug(
@@ -107,13 +116,20 @@ class FetchAndSendTweetsJob(Job):
                     display_url = tweet.text[indices[0]:indices[1]]
                     tweet_text = tweet_text.replace(display_url, expanded_url)
 
-                tweet_rows.append({
+                tw_data = {
                     'tw_id': tweet.id,
                     'text': tweet_text,
                     'created_at': tweet.created_at,
                     'twitter_user': tw_user,
                     'photo_url': photo_url,
-                })
+                }
+                try:
+                    t = Tweet.get(Tweet.tw_id == tweet.id)
+                    self.logger.warning("Got duplicated tw_id on this tweet:")
+                    self.logger.warning(str(tw_data))
+                except Tweet.DoesNotExist:
+                    tweet_rows.append(tw_data)
+
                 if len(tweet_rows) >= self.TWEET_BATCH_INSERT_COUNT:
                     Tweet.insert_many(tweet_rows).execute()
                     tweet_rows = []
@@ -140,10 +156,13 @@ class FetchAndSendTweetsJob(Job):
                     tw = s.tw_user.tweets.select() \
                         .order_by(Tweet.tw_id.desc()) \
                         .first()
-                    bot.send_tweet(s.tg_chat, tw)
-                    # save the latest tweet sent on this subscription
-                    s.last_tweet_id = tw.tw_id
-                    s.save()
+                    if tw is None:
+                        self.logger.warning("Something fishy is going on here...")
+                    else:
+                        bot.send_tweet(s.tg_chat, tw)
+                        # save the latest tweet sent on this subscription
+                        s.last_tweet_id = tw.tw_id
+                        s.save()
                 except IndexError:
                     self.logger.debug("- No tweets available yet on {}".format(s.tw_user.screen_name))
 
@@ -163,3 +182,51 @@ class FetchAndSendTweetsJob(Job):
                 continue
 
             self.logger.debug("- No new tweets here.")
+
+
+        self.logger.debug("Starting tw_user cleanup")
+        if not users_to_cleanup:
+            self.logger.debug("- Nothing to cleanup")
+        else:
+            for tw_user, reason in users_to_cleanup:
+                self.logger.debug("- Cleaning up subs on user @{}, {}".format(tw_user.screen_name, reason))
+                message = INFO_CLEANUP[reason].format(tw_user.screen_name)
+                subs = list(tw_user.subscriptions)
+                for s in subs:
+                    chat = s.tg_chat
+                    if chat.delete_soon:
+                        self.logger.debug ("- - skipping because of delete_soon chatid={}".format(chat_id))
+                        continue
+                    chat_id = chat.chat_id
+                    self.logger.debug ("- - bye on chatid={}".format(chat_id))
+                    s.delete_instance()
+
+                    try:
+                        bot.sendMessage(chat_id=chat_id, text=message)
+                    except TelegramError as e:
+                        self.logger.info("Couldn't send unsubscription notice of {} to chat {}: {}".format(
+                            tw_user.screen_name, chat_id, e.message
+                        ))
+
+                        delet_this = None
+
+                        if e.message == 'Bad Request: group chat was migrated to a supergroup chat':
+                            delet_this = True
+
+                        if e.message == "Unauthorized":
+                            delet_this = True
+
+                        if delet_this:
+                            self.logger.info("Marking chat for deletion")
+                            chat.delete_soon = True
+                            chat.save()
+
+            self.logger.debug("- Cleaning up TwitterUser @{}".format(tw_user.screen_name, reason))
+            tw_user.delete_instance()
+
+            self.logger.debug ("- Cleanup finished")
+
+        self.logger.debug("Cleaning up TelegramChats marked for deletion")
+        for chat in TelegramChat.select().where(TelegramChat.delete_soon == True):
+            chat.delete_instance(recursive=True)
+            self.logger.debug("Deleting chat {}".format(chat.chat_id))

@@ -2,7 +2,7 @@ import datetime
 
 import tweepy
 from peewee import (Model, DateTimeField, ForeignKeyField, BigIntegerField, CharField,
-                    IntegerField, TextField, OperationalError)
+                    IntegerField, TextField, OperationalError, BooleanField)
 from playhouse.migrate import migrate, SqliteMigrator, SqliteDatabase
 from tweepy.auth import OAuthHandler
 
@@ -34,6 +34,7 @@ class TelegramChat(Model):
     twitter_token = CharField(null=True)
     twitter_secret = CharField(null=True)
     timezone_name = CharField(null=True)
+    delete_soon = BooleanField(default=False)
 
     @property
     def is_group(self):
@@ -83,8 +84,11 @@ class Tweet(Model):
     def name(self):
         return self.twitter_user.name
 
+
+# Create tables
 for t in (TwitterUser, TelegramChat, Tweet, Subscription):
     t.create_table(fail_silently=True)
+
 
 # Migrate new fields. TODO: think of some better migration mechanism
 db = SqliteDatabase('peewee.db', timeout=10)
@@ -96,6 +100,7 @@ operations = [
     migrator.add_column('telegramchat', 'twitter_token', TelegramChat.twitter_token),
     migrator.add_column('telegramchat', 'twitter_secret', TelegramChat.twitter_secret),
     migrator.add_column('telegramchat', 'timezone_name', TelegramChat.timezone_name),
+    migrator.add_column('telegramchat', 'delete_soon', TelegramChat.delete_soon),
 ]
 for op in operations:
     try:

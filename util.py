@@ -29,7 +29,7 @@ def escape_markdown(text):
 
 def markdown_twitter_usernames(text):
     """Restore markdown escaped usernames and make them link to twitter"""
-    return re.sub(r'@([^\s]*)',
+    return re.sub(r'@([A-Za-z0-9_\\]+)',
                   lambda s: '[@{username}](https://twitter.com/{username})'
                   .format(username=s.group(1).replace(r'\_', '_')),
                   text)
@@ -37,8 +37,8 @@ def markdown_twitter_usernames(text):
 
 def markdown_twitter_hashtags(text):
     """Restore markdown escaped hashtags and make them link to twitter"""
-    return re.sub(r' #([^\s]*)',
-                  lambda s: ' [#{tag}](https://twitter.com/hashtag/{tag})'
+    return re.sub(r'#([^\s]*)',
+                  lambda s: '[#{tag}](https://twitter.com/hashtag/{tag})'
                   .format(tag=s.group(1).replace(r'\_', '_')),
                   text)
 

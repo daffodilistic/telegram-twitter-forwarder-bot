@@ -27,6 +27,7 @@ class TwitterForwarderBot(Bot):
         
         self.logger.debug("List of sudoers: " + pprint.pformat(self.sudoers))
 
+
     def reply(self, update, text, *args, **kwargs):
         self.sendMessage(chat_id=update.message.chat.id, text=text, *args, **kwargs)
 
@@ -72,9 +73,18 @@ class TwitterForwarderBot(Bot):
                 tweet.tw_id, chat.chat_id, e.message
             ))
 
+            delet_this = None
+
+            if e.message == 'Bad Request: group chat was migrated to a supergroup chat':
+                delet_this = True
+
             if e.message == "Unauthorized":
-                self.logger.info("Deleting chat and it's linked objects")
-                chat.delete_instance(recursive=True)
+                delet_this = True
+
+            if delet_this:
+                self.logger.info("Marking chat for deletion")
+                chat.delete_soon = True
+                chat.save()
 
     def get_chat(self, tg_chat):
         db_chat, _created = TelegramChat.get_or_create(
